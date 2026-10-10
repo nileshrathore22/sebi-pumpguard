@@ -1,0 +1,32 @@
+# Stock universe for ingestion when DATA_SOURCE=yahoo.
+# TODO(human): confirm this list. These are liquid NSE names that have traded in the
+# small/mid-cap segment; market-cap bands change over time, so review against the latest
+# AMFI classification and replace any symbol that does not fit. Symbols are bare NSE tickers;
+# the `.NS` suffix is added by the Yahoo fetcher.
+confirmed: false
+symbols:
+  - SUZLON
+  - YESBANK
+  - IDEA
+  - RPOWER
+  - JPPOWER
+  - NBCC
+  - HUDCO
+  - RVNL
+  - IRCON
+  - SJVN
+  - NHPC
+  - IEX
+  - HFCL
+  - TRIDENT
+  - IDFCFIRSTB
+  - UCOBANK
+  - CENTRALBK
+  - IOB
+  - NATIONALUM
+  - NMDC
+  - DISHTV
+  - JISLJALEQS
+  - RAIN
+  - ZEEL
+  - SOUTHBANK

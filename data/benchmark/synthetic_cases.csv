@@ -1,0 +1,13 @@
+case_id,symbol,window_start,window_end,order_reference,order_url,description,label,verified,split
+SYNTH_CASE_01,SYNTH_01,2022-02-14,2022-03-01,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.2),pump_and_dump,false,dev
+SYNTH_CASE_02,SYNTH_02,2022-04-04,2022-04-15,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.9),pump_and_dump,false,dev
+SYNTH_CASE_03,SYNTH_03,2022-06-06,2022-06-23,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.0),pump_and_dump,false,dev
+SYNTH_CASE_04,SYNTH_04,2022-08-01,2022-08-11,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.5),pump_and_dump,false,dev
+SYNTH_CASE_05,SYNTH_05,2022-09-19,2022-10-04,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.4),pump_and_dump,false,dev
+SYNTH_CASE_06,SYNTH_06,2022-11-07,2022-11-21,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.7),pump_and_dump,false,dev
+SYNTH_CASE_07,SYNTH_07,2023-02-06,2023-02-21,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.1),pump_and_dump,false,test
+SYNTH_CASE_08,SYNTH_08,2023-04-10,2023-04-21,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.8),pump_and_dump,false,test
+SYNTH_CASE_09,SYNTH_09,2023-06-05,2023-06-21,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.3),pump_and_dump,false,test
+SYNTH_CASE_10,SYNTH_10,2023-07-24,2023-08-03,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.45),pump_and_dump,false,test
+SYNTH_CASE_11,SYNTH_11,2023-09-11,2023-09-26,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 1.0),pump_and_dump,false,test
+SYNTH_CASE_12,SYNTH_12,2023-10-30,2023-11-13,SYNTHETIC - not a real SEBI order,,Synthetic injected pump pattern (intensity 0.75),pump_and_dump,false,test

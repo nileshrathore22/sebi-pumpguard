@@ -1,0 +1,80 @@
+# `make up` -> API :8000, dashboard :8501. Works with zero secrets (synthetic demo + template explainer).
+x-app-env: &app-env
+  DATABASE_URL: postgresql+psycopg://pumpguard:pumpguard@postgres:5432/pumpguard
+  REDIS_URL: redis://redis:6379/0
+  DATA_SOURCE: ${DATA_SOURCE:-synthetic}
+  LOG_LEVEL: ${LOG_LEVEL:-INFO}
+  LLM_PROVIDER: ${LLM_PROVIDER:-none}
+  LLM_API_KEY: ${LLM_API_KEY:-}
+  LLM_MODEL: ${LLM_MODEL:-gpt-4o-mini}
+  LLM_BASE_URL: ${LLM_BASE_URL:-https://api.openai.com/v1}
+  BENCHMARK_PATH: ${BENCHMARK_PATH:-data/benchmark/cases_template.csv}
+
+services:
+  postgres:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: pumpguard
+      POSTGRES_PASSWORD: pumpguard
+      POSTGRES_DB: pumpguard
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U pumpguard -d pumpguard"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redis:
+    image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  api:
+    build: { context: ., dockerfile: docker/Dockerfile }
+    image: pumpguard:local
+    environment:
+      <<: *app-env
+      SEED_DEMO: ${SEED_DEMO:-true}
+    ports: ["8000:8000"]
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      postgres: { condition: service_healthy }
+      redis: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request,sys; sys.exit(0 if urllib.request.urlopen('http://localhost:8000/health').status == 200 else 1)"]
+      interval: 10s
+      timeout: 5s
+      retries: 30
+      start_period: 120s
+
+  scheduler:
+    image: pumpguard:local
+    command: ["python", "-m", "app.cli", "schedule"]
+    environment: *app-env
+    volumes:
+      - artifacts:/app/artifacts
+    depends_on:
+      api: { condition: service_healthy }
+
+  dashboard:
+    image: pumpguard:local
+    command: ["streamlit", "run", "dashboard/app.py", "--server.port=8501", "--server.address=0.0.0.0", "--server.headless=true"]
+    environment:
+      API_URL: http://api:8000
+    ports: ["8501:8501"]
+    depends_on:
+      api: { condition: service_healthy }
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://localhost:8501/_stcore/health')"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
+volumes:
+  pgdata:
+  artifacts:

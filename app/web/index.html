@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>PumpGuard</title>
+<script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+<style>
+  body { font-family: system-ui, sans-serif; margin: 0; color: #222; background: #fafafa; }
+  header { background: #12263a; color: #fff; padding: 12px 24px; display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+  header h1 { font-size: 20px; margin: 0; }
+  nav button { background: none; border: 0; color: #cfd8e3; font-size: 15px; padding: 6px 10px; cursor: pointer; }
+  nav button.active { color: #fff; border-bottom: 2px solid #f39c12; }
+  main { max-width: 1200px; margin: 0 auto; padding: 16px 24px; }
+  .warn { background: #fff8e1; border: 1px solid #f3d27a; padding: 10px 14px; border-radius: 6px; margin: 10px 0; }
+  .row { display: flex; gap: 20px; flex-wrap: wrap; }
+  .card { background: #fff; border: 1px solid #e3e3e3; border-radius: 8px; padding: 14px; flex: 1; min-width: 280px; }
+  table { border-collapse: collapse; width: 100%; font-size: 14px; }
+  th, td { border-bottom: 1px solid #eee; padding: 6px 8px; text-align: left; }
+  select, input { font-size: 15px; padding: 4px 8px; }
+  .metric { font-size: 28px; font-weight: 600; }
+  .muted { color: #777; font-size: 13px; }
+  .hidden { display: none; }
+  a { color: #1f77b4; }
+</style>
+</head>
+<body>
+<header>
+  <h1>PumpGuard</h1>
+  <nav>
+    <button data-page="score" class="active">Stock score</button>
+    <button data-page="replay">Case replay</button>
+    <button data-page="metrics">Backtest metrics</button>
+    <button data-page="alerts">Alerts</button>
+  </nav>
+  <a href="/docs" style="color:#cfd8e3;margin-left:auto">API docs</a>
+</header>
+<main>
+  <div class="warn" id="disclaimer">Loading…</div>
+  <div class="warn">Demo data: all <b>SYNTH_</b> symbols and cases are generated for demonstration. They are not real companies or real SEBI cases.</div>
+
+  <section id="page-score">
+    <h2>Stock anomaly score</h2>
+    <label>Symbol <select id="symbol"></select></label>
+    <div class="row" style="margin-top:12px">
+      <div class="card" style="max-width:360px"><div id="gauge"></div><div class="muted" id="asof"></div></div>
+      <div class="card"><h3>Why this score?</h3><p id="explanation"></p><div class="muted" id="exppath"></div><table id="topfeat"></table></div>
+    </div>
+    <div class="card" style="margin-top:12px"><div id="chart"></div></div>
+  </section>
+
+  <section id="page-replay" class="hidden">
+    <h2>Benchmark case replay</h2>
+    <p>What the detector would have said each day before and during a known case window, using a model fitted only on data before the evaluation period.</p>
+    <label>Case <select id="case"></select></label>
+    <label style="margin-left:16px">Detector <select id="detector">
+      <option>isolation_forest</option><option>zscore_rule</option><option>logistic_regression</option></select></label>
+    <div class="row" style="margin-top:12px" id="replaymetrics"></div>
+    <div class="card" style="margin-top:12px"><div id="replaychart"></div>
+      <div class="muted">Orange band = case window. Red triangles = days the score crossed the dev-tuned threshold.</div></div>
+  </section>
+
+  <section id="page-metrics" class="hidden">
+    <h2>Backtest metrics</h2>
+    <div id="metricswarn"></div><div class="muted" id="metricsmeta"></div>
+    <div class="card" style="margin-top:12px"><table id="metricstable"></table>
+      <div class="muted">Test-split metrics with 95% bootstrap confidence intervals. Thresholds tuned on dev only.</div></div>
+  </section>
+
+  <section id="page-alerts" class="hidden">
+    <h2>Recent alerts</h2>
+    <div class="card"><table id="alertstable"></table></div>
+  </section>
+</main>
+<script>
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) => ({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]));
+async function api(path, opts) {
+  const r = await fetch(path, opts);
+  const body = await r.json();
+  if (!r.ok) throw new Error(body.error ? body.error.message : r.statusText);
+  return body;
+}
+function showError(el, e) { $(el).innerHTML = `<div class="warn">${esc(e.message)}</div>`; }
+
+function pvChart(el, pts, threshold, win) {
+  const d = pts.map((p) => p.date), flags = pts.filter((p) => (p.score ?? 0) >= threshold);
+  const traces = [
+    {x: d, y: pts.map((p) => p.close), name: "Close", line: {color: "#333"}, yaxis: "y"},
+    {x: flags.map((p) => p.date), y: flags.map((p) => p.close), mode: "markers", name: `Score ≥ ${threshold}`,
+     marker: {color: "#d62728", size: 8, symbol: "triangle-up"}, yaxis: "y"},
+    {x: d, y: pts.map((p) => p.volume), type: "bar", name: "Volume", marker: {color: "#9ecae1"}, yaxis: "y2"},
+    {x: d, y: pts.map((p) => p.score), name: "Score", line: {color: "#d62728"}, yaxis: "y3"},
+  ];
+  const shapes = [{type: "line", xref: "paper", x0: 0, x1: 1, yref: "y3", y0: threshold, y1: threshold, line: {dash: "dash"}}];
+  if (win) shapes.push({type: "rect", xref: "x", x0: win[0], x1: win[1], yref: "paper", y0: 0, y1: 1, fillcolor: "orange", opacity: 0.15, line: {width: 0}});
+  Plotly.newPlot(el, traces, {height: 600, margin: {t: 10}, legend: {orientation: "h"}, shapes,
+    yaxis: {domain: [0.5, 1], title: "Close"}, yaxis2: {domain: [0.26, 0.48], title: "Volume"},
+    yaxis3: {domain: [0, 0.24], title: "Score", range: [0, 100]}}, {responsive: true});
+}
+
+async function loadScore() {
+  const sym = $("symbol").value;
+  try {
+    const [s, h] = await Promise.all([api(`/stocks/${sym}/score`), api(`/stocks/${sym}/history`)]);
+    Plotly.newPlot("gauge", [{type: "indicator", mode: "gauge+number", value: s.score, number: {suffix: " / 100"},
+      title: {text: "Anomaly risk score"},
+      gauge: {axis: {range: [0, 100]}, bar: {color: s.flagged ? "#d62728" : "#1f77b4"},
+        steps: [{range: [s.threshold, 100], color: "#fde0dd"}],
+        threshold: {line: {color: "black", width: 3}, value: s.threshold}}}],
+      {height: 250, margin: {t: 40, b: 10, l: 20, r: 20}}, {responsive: true});
+    $("asof").textContent = `As of ${s.as_of_date} · model ${s.model_version}`;
+    $("explanation").textContent = s.explanation;
+    $("exppath").textContent = `Explanation source: ${s.explanation_path}`;
+    $("topfeat").innerHTML = "<tr><th>feature</th><th>value</th><th>robust z</th></tr>" +
+      s.top_features.map((f) => `<tr><td>${esc(f.feature)}</td><td>${f.value}</td><td>${f.robust_z}</td></tr>`).join("");
+    pvChart("chart", h.points, h.threshold);
+  } catch (e) { $("explanation").textContent = e.message; }
+}
+
+async function loadReplay() {
+  const id = $("case").value, det = $("detector").value;
+  $("replaymetrics").innerHTML = '<div class="muted">Running replay…</div>';
+  try {
+    const r = await api(`/cases/${encodeURIComponent(id)}/replay?detector=${det}`);
+    const m = (k, v) => `<div class="card"><div class="muted">${k}</div><div class="metric">${esc(v)}</div></div>`;
+    $("replaymetrics").innerHTML = m("Detected", r.detected ? "Yes" : "No") + m("Threshold (dev-tuned)", r.threshold.toFixed(1)) +
+      m("First flag", r.first_flag_date ?? "—") + m("Lead time (trading days)", r.lead_time_days ?? "—") +
+      m("Mode", r.mode);
+    pvChart("replaychart", r.series, r.threshold, [r.window_start, r.window_end]);
+  } catch (e) { showError("replaymetrics", e); }
+}
+
+let metricsLoaded = false;
+async function loadMetrics() {
+  if (metricsLoaded) return;
+  $("metricsmeta").textContent = "Running backtest (about 20 s)…";
+  try {
+    const {result: res} = await api("/evaluate/backtest", {method: "POST", headers: {"content-type": "application/json"},
+      body: JSON.stringify({source: "synthetic", mode: "dry-run", n_bootstrap: 500})});
+    $("metricswarn").innerHTML = res.warnings.map((w) => `<div class="warn">${esc(w)}</div>`).join("");
+    $("metricsmeta").textContent = `Mode: ${res.mode} · fit cutoff ${res.fit_cutoff} · verified cases: ${res.verified_cases}`;
+    const f = (t, ci, k) => t[k] == null ? "—" : t[k].toFixed(2) + (ci[k] ? ` [${ci[k][0].toFixed(2)}, ${ci[k][1].toFixed(2)}]` : "");
+    $("metricstable").innerHTML = "<tr><th>detector</th><th>threshold (dev)</th><th>precision</th><th>recall</th><th>F1</th><th>FPR</th><th>median lead (days)</th></tr>" +
+      res.detectors.map((d) => `<tr><td>${d.detector}</td><td>${d.threshold}</td><td>${f(d.test_metrics, d.test_ci, "precision")}</td>
+        <td>${f(d.test_metrics, d.test_ci, "recall")}</td><td>${f(d.test_metrics, d.test_ci, "f1")}</td>
+        <td>${f(d.test_metrics, d.test_ci, "false_positive_rate")}</td><td>${d.median_lead_time_days ?? "—"}</td></tr>`).join("");
+    metricsLoaded = true;
+  } catch (e) { showError("metricswarn", e); $("metricsmeta").textContent = ""; }
+}
+
+async function loadAlerts() {
+  const {alerts} = await api("/alerts");
+  $("alertstable").innerHTML = "<tr><th>symbol</th><th>date</th><th>score</th><th>explanation</th></tr>" +
+    alerts.map((a) => `<tr><td>${esc(a.symbol)}</td><td>${a.triggered_at}</td><td>${a.score.toFixed(1)}</td><td>${esc(a.explanation_text)}</td></tr>`).join("");
+}
+
+const loaders = {score: loadScore, replay: loadReplay, metrics: loadMetrics, alerts: loadAlerts};
+document.querySelectorAll("nav button").forEach((b) => b.onclick = () => {
+  document.querySelectorAll("nav button").forEach((x) => x.classList.toggle("active", x === b));
+  Object.keys(loaders).forEach((p) => $(`page-${p}`).classList.toggle("hidden", p !== b.dataset.page));
+  loaders[b.dataset.page]();
+});
+
+async function init() {
+  try {
+    const h = await api("/health");
+    $("disclaimer").textContent = h.disclaimer;
+    const [{stocks}, {cases}] = await Promise.all([api("/stocks"), api("/cases")]);
+    if (!stocks.length) { $("explanation").textContent = "Demo data is still loading. Refresh in about a minute."; return; }
+    $("symbol").innerHTML = stocks.map((s) => `<option${s.symbol === "SYNTH_09" ? " selected" : ""}>${esc(s.symbol)}</option>`).join("");
+    $("case").innerHTML = cases.map((c) => `<option value="${esc(c.case_id)}">${esc(c.case_id)} · ${esc(c.symbol)} · ${c.split}${c.synthetic ? " · SYNTHETIC" : ""}</option>`).join("");
+    $("symbol").onchange = loadScore; $("case").onchange = loadReplay; $("detector").onchange = loadReplay;
+    loadScore();
+  } catch (e) { $("disclaimer").textContent = "API error: " + e.message; }
+}
+init();
+</script>
+</body>
+</html>

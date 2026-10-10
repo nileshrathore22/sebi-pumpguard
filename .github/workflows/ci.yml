@@ -31,3 +31,12 @@ jobs:
         run: docker build -f docker/Dockerfile -t pumpguard:ci .
       - name: Validate compose file
         run: docker compose config -q
+      - name: Compose smoke test (make up, wait for healthchecks)
+        run: |
+          docker compose up -d --build --wait --wait-timeout 300
+          curl -fsS localhost:8000/health
+          curl -fsS localhost:8000/stocks/SYNTH_09/score > /dev/null
+          curl -fsS localhost:8501/_stcore/health
+      - name: Compose logs on failure
+        if: failure()
+        run: docker compose logs --tail=200
