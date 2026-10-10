@@ -1,64 +1,261 @@
+<div align="center">
+
 # PumpGuard
 
-PumpGuard flags **statistically anomalous price-volume behaviour** in Indian small/mid-cap stocks, which is the quantitative signature of pump-and-dump schemes. It validates itself **retrospectively** against SEBI enforcement cases and uses an LLM **only to explain** scores that have already been computed.
+**Retrospective detection of pump-and-dump signatures in Indian small/mid-cap stocks**
 
+[![CI](https://github.com/nileshrathore22/sebi-pumpguard/actions/workflows/ci.yml/badge.svg)](https://github.com/nileshrathore22/sebi-pumpguard/actions/workflows/ci.yml)
+![Python](https://img.shields.io/badge/python-3.11-blue)
+![FastAPI](https://img.shields.io/badge/FastAPI-009688?logo=fastapi&logoColor=white)
+![PostgreSQL](https://img.shields.io/badge/PostgreSQL-336791?logo=postgresql&logoColor=white)
+![Redis](https://img.shields.io/badge/Redis-DC382D?logo=redis&logoColor=white)
+![Docker](https://img.shields.io/badge/Docker-2496ED?logo=docker&logoColor=white)
+![Tests](https://img.shields.io/badge/tests-85%20passed-brightgreen)
+![Coverage](https://img.shields.io/badge/core%20coverage-99%25-brightgreen)
+
+</div>
+
+PumpGuard flags **statistically anomalous price-volume behaviour**, which is the quantitative signature of pump-and-dump schemes. It checks itself **retrospectively** against SEBI enforcement cases, and it uses an LLM **only to explain** scores that have already been computed.
+
+> **The detector decides, the LLM only explains.** No look-ahead bias. No fabricated data. Not investment advice.
+
+> [!IMPORTANT]
 > PumpGuard outputs statistical anomaly risk scores for research and education only. A high score is not an accusation of wrongdoing and is not investment advice or a buy/sell signal.
 
-## 5-minute quickstart
+---
 
-Requirements: Docker with Compose v2. No API keys needed.
+## Table of contents
 
-```bash
-git clone <this repo> && cd pumpguard
-cp .env.example .env        # optional; defaults work
-make up                     # postgres, redis, api, scheduler, dashboard
+- [Screenshots](#screenshots)
+- [Features](#features)
+- [Architecture](#architecture)
+- [Quickstart](#quickstart)
+- [How it works](#how-it-works)
+- [API](#api)
+- [Evaluation](#evaluation)
+- [What this project does NOT claim](#what-this-project-does-not-claim)
+- [Tech stack](#tech-stack)
+- [Repository layout](#repository-layout)
+- [Documentation](#documentation)
+
+---
+
+## Screenshots
+
+| Stock anomaly score | Benchmark case replay |
+|---|---|
+| ![Stock score](docs/images/stock_score.png) | ![Case replay](docs/images/case_replay.png) |
+
+| Backtest metrics (synthetic dry run) |
+|---|
+| ![Backtest metrics](docs/images/backtest_metrics.png) |
+
+All symbols shown are synthetic (`SYNTH_*`) demo data, not real companies.
+
+---
+
+## Features
+
+- **Leakage-safe features.** 10 strictly trailing features, each measured relative to the stock's own history. A test mutates future rows and checks that past features do not change.
+- **Explainable scoring.** A pooled IsolationForest produces a 0–100 percentile score plus the top contributing features.
+- **Honest baselines.** The detector is compared against a z-score rule and a logistic regression trained on dev cases only.
+- **Retrospective backtest.** Train/dev/test splits are chronological, and the threshold is tuned on dev only. Tuning on test raises `TestSplitLeakageError`.
+- **Rigorous metrics.** Precision, recall, F1 and FPR with bootstrap 95% CIs, lead time, matched negative controls and a bias audit.
+- **Grounded LLM explanations.** A LangGraph flow with a grounding check: any number or date not in the payload, or words like "manipulation" or "fraud", trigger a fallback to a deterministic template. It works without an API key.
+- **Production-style API.** FastAPI with Pydantic schemas, one consistent error format, Redis caching and per-IP rate limiting.
+- **Resilient ingestion.** Idempotent (`ON CONFLICT DO NOTHING`), exponential-backoff retries, per-symbol failure isolation, and a `pipeline_runs` audit table.
+- **Fully containerised.** `make up` starts Postgres, Redis, the API, the scheduler and the dashboard, all with healthchecks.
+- **CI.** Ruff, mypy, pytest with a coverage gate, a Docker build and a Compose smoke test.
+
+---
+
+## Architecture
+
+```mermaid
+flowchart LR
+    Y[Yahoo Finance / synthetic source] --> I[Ingestion<br/>idempotent + retry]
+    I --> PG[(PostgreSQL)]
+    PG --> F[Trailing features]
+    F --> D[Pooled IsolationForest<br/>+ baselines]
+    D --> S[0-100 score + top features]
+    S --> PG
+    B[SEBI benchmark cases<br/>verified only] --> E[Retrospective backtest<br/>dev-tuned threshold]
+    D --> E
+    S --> X[LangGraph explainer<br/>grounding check + fallback]
+    PG --> API[FastAPI]
+    E --> API
+    X --> API
+    R[(Redis cache /<br/>rate limit)] <--> API
+    API --> UI[Streamlit dashboard]
+    SCH[Scheduler<br/>daily 18:30 IST] --> I
 ```
 
-The first start takes about 1–2 minutes. The API migrates the DB and seeds a **synthetic** demo universe (`SYNTH_01…SYNTH_20`, 12 with injected pump patterns).
+The explainer runs these steps in order:
 
-* Dashboard: http://localhost:8501. Pages: stock score gauge + price/volume chart with flags, benchmark case replay, backtest metrics, alerts.
-* API docs: http://localhost:8000/docs. Try `curl localhost:8000/stocks/SYNTH_09/score`.
+```
+load_score_payload -> draft_explanation -> grounding_check -> format_response
+                                         \-- on failure / no key --> deterministic template
+```
 
-Developer loop (Python 3.11 via [uv](https://github.com/astral-sh/uv)):
+More detail is in [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md).
+
+---
+
+## Quickstart
+
+### Option A: Docker (recommended, no API keys needed)
 
 ```bash
-make install     # .venv + dev deps
-make lint typecheck test
-make backtest    # dry-run backtest on synthetic fixtures -> artifacts/
+git clone https://github.com/nileshrathore22/sebi-pumpguard.git
+cd sebi-pumpguard
+cp .env.example .env     # optional; defaults work
+make up                  # postgres, redis, api, scheduler, dashboard
 ```
+
+The first start takes about 1–2 minutes. The API migrates the database and seeds a **synthetic** demo universe: `SYNTH_01` to `SYNTH_20`, 12 of them with injected pump patterns.
+
+| Service | URL |
+|---|---|
+| Dashboard (Streamlit) | http://localhost:8501 |
+| API docs (Swagger) | http://localhost:8000/docs |
+| Lightweight web UI | http://localhost:8000/ |
+
+```bash
+curl localhost:8000/stocks/SYNTH_09/score
+```
+
+### Option B: Local development (Python 3.11 via [uv](https://github.com/astral-sh/uv))
+
+```bash
+make install                 # .venv + dev dependencies
+make lint typecheck test     # ruff, mypy, pytest (no Postgres/Redis needed)
+make backtest                # dry-run backtest on synthetic data -> artifacts/
+```
+
+### Option C: Single container (no Postgres/Redis)
+
+```bash
+DATABASE_URL=sqlite:////tmp/pumpguard.db DEMO_SEED_ON_STARTUP=true \
+  uvicorn app.main:app --port 8000      # open http://localhost:8000/
+```
+
+---
 
 ## How it works
 
-1. **Ingest** daily OHLCV from Yahoo Finance (`SYMBOL.NS`), or generate synthetic data. Ingestion is idempotent, retries with exponential backoff, and a failing symbol does not stop the others.
-2. **Features** (10, strictly trailing, relative to each stock's own history): volume z-scores (20/60 d), 1/3/5-day returns, volume-price divergence, range and volatility expansion, turnover vs median, consecutive up-days. A test mutates future rows and checks that past features do not change.
-3. **Detect** with one pooled IsolationForest. The score is the empirical percentile (0–100) and comes with the top contributing features. Baselines: a z-score rule and a logistic regression trained on dev cases only.
-4. **Evaluate** retrospectively. Cases are split chronologically into dev and test, the threshold is tuned only on dev (enforced in code), and precision/recall/F1/FPR on test come with bootstrap 95% CIs, lead time, and matched negative-control periods.
-5. **Explain** with a LangGraph flow: payload → draft → grounding check → format. Every number or date in the text must come from the payload, and words like "manipulation", "fraud" or "guarantee" are rejected. Any failure, or no API key, falls back to a deterministic template.
+| Step | What happens | Why it is defensible |
+|---|---|---|
+| 1. Ingest | Daily OHLCV from Yahoo (`SYMBOL.NS`) or the synthetic generator | Idempotent, so re-runs never duplicate rows; one failing symbol does not stop the others |
+| 2. Features | Volume z-scores (20/60 d), 1/3/5-day returns, volume-price divergence, range and volatility expansion, turnover vs median, consecutive up-days | Every feature uses only past data (`shift(1)` + rolling) and is normalised against the stock's own history |
+| 3. Detect | One IsolationForest pooled across stocks; the score is the empirical percentile (0–100) | Unsupervised, so it needs no labels; pooling avoids learning a manipulated period as "normal" |
+| 4. Threshold | Grid search maximising F1 on **dev** cases only | Test-split leakage raises an error in code |
+| 5. Evaluate | Test-split P/R/F1/FPR, bootstrap CIs, lead time, matched negative controls | The model is fitted only on data before the first test window |
+| 6. Explain | The LLM rephrases the precomputed payload, and a grounding checker validates it | The LLM never sees raw data and never decides anything |
 
-Docs: [architecture](docs/ARCHITECTURE.md) · [API](docs/API.md) · [evaluation & bias audit](docs/EVALUATION.md) · [design decisions](docs/DECISIONS.md) · [runbook](docs/RUNBOOK.md) · [plan](docs/PLAN.md)
+Every design choice and the alternatives considered are recorded in [docs/DECISIONS.md](docs/DECISIONS.md) (D1–D17).
 
-## Current status of the evaluation
+---
 
-The repository ships with **no real SEBI cases**. `data/benchmark/cases_template.csv` contains empty placeholder rows only. All numbers you see in the demo come from a **synthetic dry run**, and every output that uses them is labelled as such. To produce the official result, add 15–20 verified cases (see [runbook](docs/RUNBOOK.md#adding-real-sebi-cases-human-step)) and run `make backtest-official`. Below 15 verified cases, every report carries a "not statistically meaningful" warning.
+## API
+
+| Method | Endpoint | Description |
+|---|---|---|
+| `GET` | `/health` | Database and cache status |
+| `GET` | `/stocks` | Universe of tracked stocks |
+| `GET` | `/stocks/{symbol}/score` | Latest score, threshold, top features, explanation |
+| `GET` | `/stocks/{symbol}/history` | Price, volume and score time series |
+| `GET` | `/cases` | Benchmark cases (synthetic ones are marked) |
+| `GET` | `/cases/{case_id}/replay` | Day-by-day detector replay around a case window |
+| `POST` | `/evaluate/backtest` | Run the retrospective backtest (official or dry-run) |
+| `GET` | `/alerts` | Recent threshold crossings |
+
+Every response includes the disclaimer. Errors share one shape: `{"error": {"code", "message"}, "disclaimer"}`. Full reference: [docs/API.md](docs/API.md).
+
+---
+
+## Evaluation
+
+> [!WARNING]
+> The repository ships with **no real SEBI cases**. The numbers below come from a **synthetic dry run** and are **not** evidence of real-world performance.
+
+| Detector | Dev threshold | Test precision | Test recall | Test F1 [95% CI] | Test FPR |
+|---|---:|---:|---:|---:|---:|
+| IsolationForest | 97.05 | 0.67 | 1.00 | 0.80 [0.67, 0.92] | 0.25 |
+| Z-score rule | 98.30 | 0.40 | 0.67 | 0.50 [0.27, 0.71] | 0.50 |
+| Logistic regression | 93.00 | 0.75 | 1.00 | 0.86 [0.71, 1.00] | 0.17 |
+
+**To produce the official result:**
+
+1. Add 15–20 verified SEBI cases to `data/benchmark/cases_template.csv`, each with its order URL on `sebi.gov.in` and `verified=true`.
+2. Run `make validate-cases`. Official mode rejects unverified and synthetic rows.
+3. Run `make backtest-official`.
+
+With fewer than 15 verified cases, every report carries a "not statistically meaningful" warning. See [docs/EVALUATION.md](docs/EVALUATION.md) and [docs/RUNBOOK.md](docs/RUNBOOK.md).
+
+---
 
 ## What this project does NOT claim
 
-* It does **not** detect manipulation, fraud or intent. It measures how unusual a day's price-volume behaviour is relative to history. Many legitimate events (results, news, index inclusion, corporate actions) also look unusual.
-* A high score is **not** an accusation, **not** evidence, and **not** a buy/sell signal.
-* It is **not** a real-time surveillance system. It works on end-of-day data.
-* Synthetic results are **not** evidence of real-world performance. Only an official backtest on verified SEBI cases is.
-* With only 15–20 cases, the confidence intervals are wide, so treat point estimates with caution.
-* SEBI cases are a biased sample of schemes that were *caught*. Undetected schemes and non-enforced pumps are absent, which biases recall estimates (see the bias audit in [EVALUATION.md](docs/EVALUATION.md#3-bias-audit)).
-* The LLM never sees raw market data and never decides anything. It rephrases already computed numbers, and its output is checked.
+- It does **not** detect manipulation, fraud or intent. It measures how *unusual* price-volume behaviour is. Results, news, index inclusion and corporate actions can also look unusual.
+- A high score is **not** an accusation, **not** evidence, and **not** a buy/sell signal.
+- It is **not** real-time surveillance. It uses end-of-day data.
+- Synthetic results are **not** real-world performance.
+- With 15–20 cases the confidence intervals are wide, so treat point estimates with caution.
+- SEBI cases are a biased sample of schemes that were *caught*. See the bias audit in [EVALUATION.md](docs/EVALUATION.md#3-bias-audit).
+
+---
+
+## Tech stack
+
+| Layer | Tools |
+|---|---|
+| API | FastAPI, Pydantic v2, Uvicorn |
+| Data | PostgreSQL, SQLAlchemy 2, Alembic, Redis |
+| ML / stats | pandas, NumPy, scikit-learn (IsolationForest, LogisticRegression) |
+| Explanation | LangGraph, OpenAI-compatible client (optional), deterministic template |
+| Dashboard | Streamlit, Plotly |
+| Scheduling | APScheduler |
+| Quality | pytest, pytest-cov, Ruff, mypy, pre-commit, GitHub Actions |
+| Deployment | Docker, Docker Compose |
+
+---
 
 ## Repository layout
 
 ```
-app/            ingestion, features, detection, evaluation, explain, api, cache, db, jobs, scheduler
+app/
+  ingestion/    fetchers (Yahoo, synthetic), retry, pipeline, benchmark loader
+  features/     strictly trailing feature engineering
+  detection/    IsolationForest, baselines, scoring, dev-only threshold
+  evaluation/   backtest, negative controls, metrics + bootstrap CIs, reports
+  explain/      payload, templates, LLM client, grounding check, LangGraph graph
+  api/          FastAPI app, routers, schemas, errors, rate limit
+  web/          lightweight HTML dashboard served at /
+  cache/ db/    Redis cache, SQLAlchemy models, Alembic migrations
+  jobs.py scheduler.py cli.py
 dashboard/      Streamlit app (talks to the API only)
 config/         universe.yaml (stock list, needs human confirmation)
-data/benchmark/ cases_template.csv (real cases, human-filled), synthetic_cases.csv (SYNTH_ fixtures)
+data/benchmark/ cases_template.csv (real cases, human-filled), synthetic_cases.csv
 docker/         Dockerfile + API entrypoint
-docs/           architecture, API, evaluation, decisions, runbook
-tests/          pytest suite (leakage, threshold-split, grounding, API, ingestion, ...)
+docs/           architecture, API, evaluation, decisions, runbook, plan
+tests/          leakage, threshold split, grounding, API, ingestion, backtest, ...
 ```
+
+---
+
+## Documentation
+
+| Doc | Contents |
+|---|---|
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Components, data flow, deployment |
+| [API.md](docs/API.md) | Endpoint reference and examples |
+| [EVALUATION.md](docs/EVALUATION.md) | Methodology, metrics, bias audit |
+| [DECISIONS.md](docs/DECISIONS.md) | Design decisions D1–D17 with alternatives |
+| [RUNBOOK.md](docs/RUNBOOK.md) | Operating, adding SEBI cases, troubleshooting |
+| [PLAN.md](docs/PLAN.md) | Phase-by-phase build plan |
+
+---
+
+<div align="center">
+Final-year B.Tech CSE project · For research and education only · Not investment advice
+</div>
