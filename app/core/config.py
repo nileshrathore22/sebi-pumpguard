@@ -35,6 +35,8 @@ class Settings(BaseSettings):
     ingestion_lookback_days: int = 3 * 365
     scheduler_cron_hour: int = 18
     scheduler_cron_minute: int = 30
+    # single-container demo: create tables + seed synthetic data in the background at startup
+    demo_seed_on_startup: bool = False
 
 
 @lru_cache

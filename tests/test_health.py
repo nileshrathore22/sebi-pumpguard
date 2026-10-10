@@ -30,3 +30,9 @@ def test_health_ok() -> None:
     body = resp.json()
     assert body["status"] == "ok" and body["database"] and body["cache"]
     assert body["disclaimer"] == DISCLAIMER
+
+
+def test_web_ui_served() -> None:
+    resp = _client("sqlite://").get("/")
+    assert resp.status_code == 200
+    assert "PumpGuard" in resp.text and "text/html" in resp.headers["content-type"]

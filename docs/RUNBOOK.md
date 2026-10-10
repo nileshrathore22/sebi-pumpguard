@@ -51,3 +51,16 @@ Set `DATA_SOURCE=yahoo` in `.env`. The scheduler ingests the universe every week
 | `/health` shows `status: degraded` | Postgres unreachable or `DATABASE_URL` wrong |
 | 404 on `/stocks/X/score` | X not ingested or not yet scored: run `ingest` then `score` |
 | 409 on official backtest | no verified cases loaded (see above) |
+
+## Single-container demo (no Postgres/Redis)
+
+For a hosted demo where only one container can run, the API also serves a lightweight web dashboard at `/` (`app/web/index.html`). Set:
+
+```bash
+DATABASE_URL=sqlite:////tmp/pumpguard.db
+REDIS_URL=redis://127.0.0.1:1/0      # unreachable -> in-process cache
+DEMO_SEED_ON_STARTUP=true            # create tables + seed synthetic demo in a background thread
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+SQLite here is for the throwaway demo only; the Compose stack (Postgres + Redis) remains the production setup.

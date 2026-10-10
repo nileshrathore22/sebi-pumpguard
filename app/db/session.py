@@ -9,7 +9,12 @@ from app.core.config import get_settings
 
 @lru_cache
 def get_engine(url: str | None = None) -> Engine:
-    return create_engine(url or get_settings().database_url, pool_pre_ping=True, future=True)
+    return _engine(url or get_settings().database_url)
+
+
+@lru_cache(maxsize=8)
+def _engine(url: str) -> Engine:
+    return create_engine(url, pool_pre_ping=True, future=True)
 
 
 def get_sessionmaker(url: str | None = None) -> sessionmaker[Session]:
