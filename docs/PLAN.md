@@ -6,7 +6,7 @@ Phase-by-phase checklist. Each phase ends with tests + lint green and a conventi
 |---|---|---|
 | 0 | Scaffold: layout, env config, JSON logging, Makefile, pre-commit, CI | done |
 | 1 | Data layer: SQLAlchemy models, Alembic, idempotent ingestion with retry/backoff, per-symbol failure isolation, universe.yaml, benchmark loader/validator | done |
-| 2 | Strictly trailing feature engineering + leakage test | todo |
+| 2 | Strictly trailing feature engineering + leakage test | done |
 | 3 | Detection: pooled IsolationForest, z-score rule + logistic baselines, 0-100 score, top features, dev-only threshold | todo |
 | 4 | Evaluation: backtest runner, negative controls, P/R/F1/FPR + bootstrap CIs, bias audit, CLI + API | todo |
 | 5 | Explanation: LangGraph agent with grounding check, template fallback | todo |

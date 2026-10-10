@@ -36,3 +36,9 @@ rows, so no real-looking result can be produced until a human fills it in.
 (seeded). Pump intensity varies (0.45-1.4) so some cases are deliberately hard and recall is
 not trivially 100%. Random one-day "news" spikes in every series create realistic false
 positives. Dev cases are in 2022 and test cases in 2023 (chronological split).
+
+## D8. Features are relative to the symbol's own trailing history
+Every feature is a z-score, ratio or return against the same symbol's preceding window. This
+makes a pooled model meaningful across stocks with very different price and liquidity levels
+(a 5x volume day means the same thing for a Rs 20 stock and a Rs 2,000 stock). Log-volume is
+used for z-scores because raw volume is heavily right-skewed.
