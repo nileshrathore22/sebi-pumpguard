@@ -8,7 +8,7 @@ Phase-by-phase checklist. Each phase ends with tests + lint green and a conventi
 | 1 | Data layer: SQLAlchemy models, Alembic, idempotent ingestion with retry/backoff, per-symbol failure isolation, universe.yaml, benchmark loader/validator | done |
 | 2 | Strictly trailing feature engineering + leakage test | done |
 | 3 | Detection: pooled IsolationForest, z-score rule + logistic baselines, 0-100 score, top features, dev-only threshold | done |
-| 4 | Evaluation: backtest runner, negative controls, P/R/F1/FPR + bootstrap CIs, bias audit, CLI + API | todo |
+| 4 | Evaluation: backtest runner, negative controls, P/R/F1/FPR + bootstrap CIs, bias audit, CLI + API | done |
 | 5 | Explanation: LangGraph agent with grounding check, template fallback | todo |
 | 6 | API (FastAPI), Redis caching, rate limiting, Streamlit dashboard with case replay | todo |
 | 7 | Docker/compose with healthchecks, scheduler, docs, CI green | todo |
