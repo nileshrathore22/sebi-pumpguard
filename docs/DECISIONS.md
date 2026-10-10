@@ -84,3 +84,20 @@ variants). On rejection, LLM error or no API key, the deterministic template is 
 taken is logged and returned. The provider is any OpenAI-compatible endpoint
 (`LLM_PROVIDER=openai`). Temperature is 0.
 *Alternative:* asking the LLM to self-censor. Rejected because it cannot be verified.
+
+## D15. API caching and rate limiting share one Redis
+Read endpoints cache JSON responses with `CACHE_TTL_SECONDS` (default 300 s). Keys include
+`model_version`, so a new model never serves stale scores. Rate limiting is a fixed one-minute
+window per client IP. If Redis is unreachable, both degrade gracefully: the cache falls back to
+in-process memory and the limiter fails open. A cache outage should not take the API down.
+*Alternative:* a sliding-window or token-bucket limiter. That is more precise but more code; it is not needed at demo scale.
+
+## D16. Live model vs evaluation model
+The evaluation model is fit strictly before the test period. The live model, used for the dashboard and
+alerts, is refit on all stored history, because monitoring today's data should use everything known
+up to today. Alerts use the dev-tuned threshold from the latest backtest artifact
+(default 90 if none exists). Only backtest numbers are reported as performance.
+
+## D17. One Docker image for api, scheduler and dashboard
+Using one image means one build and one dependency set, with a different `command` per service. The API container
+runs migrations at start-up, so dependents only need to wait for the API healthcheck.

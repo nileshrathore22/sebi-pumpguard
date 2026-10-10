@@ -11,7 +11,7 @@ Phase-by-phase checklist. Each phase ends with tests + lint green and a conventi
 | 4 | Evaluation: backtest runner, negative controls, P/R/F1/FPR + bootstrap CIs, bias audit, CLI + API | done |
 | 5 | Explanation: LangGraph agent with grounding check, template fallback | done |
 | 6 | API (FastAPI), Redis caching, rate limiting, Streamlit dashboard with case replay | done |
-| 7 | Docker/compose with healthchecks, scheduler, docs, CI green | todo |
+| 7 | Docker/compose with healthchecks, scheduler, docs, CI green | done |
 | 8 | (stretch) social-signal module behind a feature flag | not started |
 
 ## Human-in-the-loop items

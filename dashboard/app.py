@@ -142,7 +142,7 @@ def page_replay() -> None:
     }
     case = labels[st.selectbox("Case", list(labels))]
     detector = st.radio(
-        "Detector", ["isolation_forest", "zscore_rule", "logistic"], horizontal=True
+        "Detector", ["isolation_forest", "zscore_rule", "logistic_regression"], horizontal=True
     )
     try:
         rep = api_get(f"/cases/{case['case_id']}/replay", detector=detector)
@@ -203,7 +203,7 @@ def page_metrics() -> None:
                 "precision": fmt("precision"),
                 "recall": fmt("recall"),
                 "F1": fmt("f1"),
-                "FPR": fmt("fpr"),
+                "FPR": fmt("false_positive_rate"),
                 "median lead (days)": d.get("median_lead_time_days"),
             }
         )
