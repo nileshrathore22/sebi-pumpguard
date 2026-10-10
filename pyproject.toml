@@ -11,7 +11,10 @@ extend-exclude = ["app/db/alembic/versions"]
 
 [tool.ruff.lint]
 select = ["E", "F", "W", "I", "B", "UP", "SIM", "N"]
-ignore = ["B008"]  # FastAPI Depends() in defaults is idiomatic
+ignore = [
+  "B008",  # FastAPI Depends() in defaults is idiomatic
+  "E501",  # line length is handled by `ruff format`
+]
 
 [tool.mypy]
 python_version = "3.11"
