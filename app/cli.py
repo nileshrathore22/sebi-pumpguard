@@ -79,6 +79,61 @@ def cmd_backtest(args: argparse.Namespace) -> int:
     return 0
 
 
+def cmd_seed_demo(args: argparse.Namespace) -> int:
+    from sqlalchemy import func, select
+
+    from app.db.models import Stock
+    from app.db.session import get_sessionmaker
+    from app.jobs import seed_demo
+
+    with get_sessionmaker()() as session:
+        if args.if_empty and session.scalar(select(func.count()).select_from(Stock)):
+            print("database already has stocks; skipping demo seed")
+            return 0
+        print(seed_demo(session, get_settings()))
+    return 0
+
+
+def cmd_ingest(args: argparse.Namespace) -> int:
+    from app.db.session import get_sessionmaker
+    from app.jobs import ingest
+
+    with get_sessionmaker()() as session:
+        run = ingest(session, get_settings())
+        print(f"status={run.status} symbols_failed={run.symbols_failed}")
+        return 0 if run.status != "failed" else 1
+
+
+def cmd_score(args: argparse.Namespace) -> int:
+    from app.db.session import get_sessionmaker
+    from app.jobs import score_and_alert
+
+    with get_sessionmaker()() as session:
+        print(score_and_alert(session, get_settings()))
+    return 0
+
+
+def cmd_load_cases(args: argparse.Namespace) -> int:
+    from app.db.session import get_sessionmaker
+    from app.ingestion.benchmark import load_benchmark, store_cases
+
+    path = args.path or get_settings().benchmark_path
+    report = load_benchmark(path, args.mode)
+    print(report.summary())
+    if not report.accepted:
+        return 1
+    with get_sessionmaker()() as session:
+        print(f"stored {store_cases(session, report.accepted)} cases")
+    return 0
+
+
+def cmd_schedule(args: argparse.Namespace) -> int:
+    from app.scheduler import run
+
+    run(run_now=args.run_now)
+    return 0
+
+
 def main(argv: list[str] | None = None) -> int:
     configure_logging(get_settings().log_level)
     parser = argparse.ArgumentParser(prog="pumpguard")
@@ -95,6 +150,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--bootstrap", type=int, default=1000)
     p.add_argument("--no-doc", action="store_true", help="do not rewrite docs/EVALUATION.md")
     p.set_defaults(func=cmd_backtest)
+
+    p = sub.add_parser("load-cases", help="validate and store benchmark cases in the DB")
+    p.add_argument("--path", type=__import__("pathlib").Path)
+    p.add_argument("--mode", choices=["official", "dry-run"], default="official")
+    p.set_defaults(func=cmd_load_cases)
+
+    for name, fn, help_ in (
+        ("ingest", cmd_ingest, "ingest prices for the configured DATA_SOURCE"),
+        ("score", cmd_score, "score all stored history and raise alerts"),
+    ):
+        sub.add_parser(name, help=help_).set_defaults(func=fn)
+
+    p = sub.add_parser(
+        "seed-demo", help="load synthetic demo data, backtest and score (no secrets)"
+    )
+    p.add_argument("--if-empty", action="store_true", help="skip if stocks already exist")
+    p.set_defaults(func=cmd_seed_demo)
+
+    p = sub.add_parser("schedule", help="run the daily ingest+score scheduler (blocking)")
+    p.add_argument("--run-now", action="store_true")
+    p.set_defaults(func=cmd_schedule)
 
     args = parser.parse_args(argv)
     return int(args.func(args))

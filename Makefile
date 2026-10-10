@@ -33,7 +33,7 @@ fmt:
 	$(PY) -m ruff format .
 
 typecheck:
-	$(PY) -m mypy app
+	$(PY) -m mypy app && $(PY) -m mypy dashboard/app.py
 
 ci: lint typecheck test
 

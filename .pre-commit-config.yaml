@@ -16,7 +16,7 @@ repos:
     hooks:
       - id: mypy
         name: mypy
-        entry: .venv/bin/python -m mypy app
+        entry: .venv/bin/python -m mypy app dashboard/app.py
         language: system
         pass_filenames: false
         types: [python]
