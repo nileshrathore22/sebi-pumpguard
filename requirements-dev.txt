@@ -1,0 +1,8 @@
+-r requirements.txt
+pytest>=8.2
+pytest-cov>=5.0
+ruff>=0.5
+mypy>=1.10
+pre-commit>=3.7
+fakeredis>=2.23
+types-PyYAML
