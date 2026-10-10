@@ -75,3 +75,12 @@ During backtesting every model is fit only on rows dated before
 `min(test window_start) - pre_window_days`. So no model, unsupervised or supervised, sees
 anything from the test period. For live scoring (dashboard / API) the model is refit on all
 history up to the latest date, which is legitimate because it is only applied going forward.
+
+## D14. Explanation layer: LLM explains, never decides
+The LangGraph graph receives a pre-rounded JSON payload (score, threshold, top features with
+human-readable labels), never raw prices. `grounding_check` rejects any text containing a number
+or date not present in the payload, or the words manipulation, fraud or guarantee (and their
+variants). On rejection, LLM error or no API key, the deterministic template is used. The path
+taken is logged and returned. The provider is any OpenAI-compatible endpoint
+(`LLM_PROVIDER=openai`). Temperature is 0.
+*Alternative:* asking the LLM to self-censor. Rejected because it cannot be verified.
